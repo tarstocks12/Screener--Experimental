@@ -39,7 +39,7 @@ export default function NextDaySmartDashboard({ personalSymbols = [] }: { person
   const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>("1D");
   const [sortMode, setSortMode] = useState<"ai" | "live">("ai");
   const [auditSearchSymbol, setAuditSearchSymbol] = useState("");
-  const [minStreakDays, setMinStreakDays] = useState<number>(3);
+  const [minStreakDays, setMinStreakDays] = useState<number>(1);
 
   const TIMEFRAMES: Timeframe[] = ["15m", "1H", "4H", "1D", "1W"];
 
@@ -82,11 +82,16 @@ export default function NextDaySmartDashboard({ personalSymbols = [] }: { person
   const streakData = useMemo(() => {
     if (!filteredAuditLogs || filteredAuditLogs.length === 0) return [];
     
-    const latestLog = filteredAuditLogs[0];
     const activeSymbols = new Set<string>();
     
-    latestLog.bullishPicks?.forEach(p => activeSymbols.add(p.symbol));
-    latestLog.bearishPicks?.forEach(p => activeSymbols.add(p.symbol));
+    if (data && data.length > 0) {
+      data.forEach(d => activeSymbols.add(d.Symbol));
+    } else {
+      filteredAuditLogs.forEach(log => {
+        log.bullishPicks?.forEach((p: any) => activeSymbols.add(p.symbol));
+        log.bearishPicks?.forEach((p: any) => activeSymbols.add(p.symbol));
+      });
+    }
     
     const results: any[] = [];
     
@@ -105,9 +110,9 @@ export default function NextDaySmartDashboard({ personalSymbols = [] }: { person
           type = "BEAR";
         }
         
-        if (!pick) break;
+        if (!pick) continue;
         
-        if (i === 0) {
+        if (streak === 0) {
           streakType = type;
         } else {
           if (type !== streakType) break;
@@ -787,6 +792,7 @@ export default function NextDaySmartDashboard({ personalSymbols = [] }: { person
                     onChange={(e) => setMinStreakDays(Number(e.target.value))}
                     className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg px-2 py-1 outline-none focus:border-rose-500"
                   >
+                    <option value={1}>1 Day</option>
                     <option value={2}>2 Days</option>
                     <option value={3}>3 Days</option>
                     <option value={4}>4 Days</option>
@@ -811,7 +817,12 @@ export default function NextDaySmartDashboard({ personalSymbols = [] }: { person
                     <tbody>
                       {streakData.map((item, idx) => (
                         <tr key={idx} className="border-b border-slate-700/30 hover:bg-slate-800/50">
-                          <td className="py-2 font-medium">{item.symbol}</td>
+                          <td className="py-2 font-medium flex items-center gap-1">
+                            {item.symbol}
+                            <a href={getTradingViewUrl(item.symbol)} target="_blank" rel="noreferrer" className="text-slate-500 hover:text-indigo-400 transition-colors">
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </td>
                           <td className="py-2 text-center">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${item.type === 'BULL' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
                               {item.type}
