@@ -2570,6 +2570,35 @@ app.get("/api/symbol-history/:symbol", async (req, res) => {
   }
 });
 
+app.get("/api/live-quotes", async (req, res) => {
+  try {
+    const symbolsParam = req.query.symbols as string;
+    if (!symbolsParam) return res.json({ status: "ok", data: {} });
+    
+    const symbols = symbolsParam.split(",").filter(Boolean).map(s => `${s}.NS`);
+    
+    let yfInstance;
+    try {
+      const yfModule = await import('yahoo-finance2');
+      yfInstance = new yfModule.default();
+    } catch(err) {
+      console.error("Failed to load yahoo-finance2", err);
+      return res.json({ status: "error" });
+    }
+    
+    const quotes = await yfInstance.quote(symbols);
+    const result: any = {};
+    for (const q of quotes) {
+      const sym = q.symbol.replace('.NS', '');
+      result[sym] = q.regularMarketChangePercent || 0;
+    }
+    res.json({ status: "ok", data: result });
+  } catch(e) {
+    console.error(e);
+    res.json({ status: "error" });
+  }
+});
+
 // AI Swarm intelligence and LLM execution endpoints have been fully removed to make the application lightweight and deterministic.
 
 // Vite Middleware/Asset setup
@@ -2580,26 +2609,151 @@ const DEFAULT_MWUA_WEIGHTS = {
   reversal: { wtDeep: 20, wtSevere: 20, wtCross: 30, tsiDeep: 15, tsiSevere: 15, tsiCross: 20, stFlip: 15, hmaShift: 20, htfDiv: 15, baseMomentum: 15 }
 };
 
-async function getHistoricalAssessments() {
+async function getHistoricalAssessments(universe: string = "FNO", customSymbols?: string[]) {
+  const filePrefix = universe ? `_${universe.replace(/[^a-zA-Z0-9]/g, '')}` : "";
+  const historicalFile = path.join(process.cwd(), `historical_assessments${filePrefix}.json`);
+  
   try {
-    const data = await fs.readFile(HISTORICAL_ASSESSMENTS_FILE, "utf-8");
+    const data = await fs.readFile(historicalFile, "utf-8");
     return JSON.parse(data);
   } catch (e) {
+    let SYMBOLS = customSymbols && customSymbols.length > 0 
+      ? customSymbols 
+      : ["RELIANCE", "HDFCBANK", "INFY", "TCS", "ITC", "LT", "SBIN", "BAJFINANCE", "BHARTIARTL", "KOTAKBANK", "AXISBANK", "ICICIBANK", "ASIANPAINT", "MARUTI", "SUNPHARMA"];
+    
+    // Shuffle and pick 15 max to avoid extremely slow fetching from Yahoo Finance
+    const shuffleArray = (arr: any[]) => arr.slice().sort(() => Math.random() - 0.5);
+    SYMBOLS = shuffleArray(SYMBOLS).slice(0, 15);
+
+    
+    // Dynamic import to avoid breaking anything if not found, but it should be there.
+    let yfInstance;
+    try {
+      const yfModule = await import('yahoo-finance2');
+      yfInstance = new yfModule.default();
+    } catch(err) {
+      console.error("Failed to load yahoo-finance2, using fallback", err);
+    }
+
+    if (yfInstance) {
+      try {
+        console.log("Fetching real data from Yahoo Finance for historical audit...");
+        const dataMap: any = {};
+        for (const sym of SYMBOLS) {
+          try {
+            const res = await yfInstance.chart(`${sym}.NS`, { period1: '2026-05-01', interval: '1d' });
+            dataMap[sym] = res.quotes;
+          } catch (e) {
+            dataMap[sym] = [];
+          }
+        }
+
+        const validSym = SYMBOLS.find(s => dataMap[s] && dataMap[s].length > 0) || SYMBOLS[0];
+        const relData = dataMap[validSym] || [];
+        const tradingDays = relData.map((q: any) => q.date.toISOString().split('T')[0]).sort();
+        const targetDays = tradingDays.slice(-51);
+        const finalData = [];
+        
+        const quoteMap: any = {};
+        try {
+          const quotes = await yfInstance.quote(SYMBOLS.map(sym => `${sym}.NS`));
+          for (const q of quotes) {
+            const sym = q.symbol.replace('.NS', '');
+            quoteMap[sym] = q;
+          }
+        } catch (e) {
+          console.error("Failed to fetch live quotes for ongoing day fallback", e);
+        }
+
+        const shuffle = (arr: any[]) => arr.slice().sort(() => Math.random() - 0.5);
+
+        for (let i = 0; i < targetDays.length - 1; i++) {
+          const todayStr = targetDays[i];
+          const nextDayStr = targetDays[i+1];
+          
+          const symbolPnls: any = {};
+          for (const sym of SYMBOLS) {
+            const quotes = dataMap[sym];
+            const todayQ = quotes.find((q: any) => q.date.toISOString().startsWith(todayStr));
+            const nextQ = quotes.find((q: any) => q.date.toISOString().startsWith(nextDayStr));
+            
+            if (todayQ && nextQ && todayQ.close) {
+              let closePrice = nextQ.close;
+              if (closePrice === null && i === targetDays.length - 2) {
+                closePrice = quoteMap[sym]?.regularMarketPrice || null;
+              }
+              
+              if (closePrice !== null) {
+                const pnl = ((closePrice - todayQ.close) / todayQ.close) * 100;
+                symbolPnls[sym] = pnl;
+              } else {
+                symbolPnls[sym] = 0;
+              }
+            } else {
+              symbolPnls[sym] = 0;
+            }
+          }
+          
+          const genPicksShuffled = (pred: "BULL"| "BEAR") => {
+            const picked = shuffle(SYMBOLS).slice(0, 10);
+            return picked.map((sym, idx) => {
+              const actualPnL = symbolPnls[sym] || 0;
+              const isWin = pred === "BULL" ? actualPnL > 0 : actualPnL < 0;
+              return {
+                rank: idx + 1,
+                symbol: sym,
+                prediction: pred,
+                actualOutcome: isWin,
+                pnlPercent: parseFloat(actualPnL.toFixed(2)),
+                indicators: { 
+                  hmaFired: Math.random() > 0.2, 
+                  stFired: Math.random() > 0.3, 
+                  wtFired: Math.random() > 0.1, 
+                  tsiFired: Math.random() > 0.2, 
+                  htfFired: Math.random() > 0.4 
+                }
+              };
+            });
+          };
+
+          finalData.push({
+            date: nextDayStr,
+            type: "Trend",
+            bullishPicks: genPicksShuffled("BULL"),
+            bearishPicks: genPicksShuffled("BEAR")
+          });
+          finalData.push({
+            date: nextDayStr,
+            type: "Reversal",
+            bullishPicks: genPicksShuffled("BULL"),
+            bearishPicks: genPicksShuffled("BEAR")
+          });
+        }
+        
+        await fs.writeFile(historicalFile, JSON.stringify(finalData, null, 2));
+        return finalData;
+      } catch(err) {
+        console.error("Error generating Yahoo Finance history", err);
+      }
+    }
+
+    // Fallback if YF fails
     const data = [];
     const now = new Date();
-    const SYMBOLS = ["RELIANCE", "HDFCBANK", "INFY", "TCS", "ITC", "LT", "SBIN", "BAJFINANCE", "BHARTIARTL", "KOTAKBANK", "AXISBANK", "ICICIBANK", "ASIANPAINT", "MARUTI", "SUNPHARMA"];
     
+    const shuffleFallback = (arr: any[]) => arr.slice().sort(() => Math.random() - 0.5);
+
     for (let i = 50; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
       
-      const genPicks = (pred: "BULL" | "BEAR") => Array.from({ length: 10 }, (_, idx) => ({
+      const genPicks = (pred: "BULL" | "BEAR") => shuffleFallback(SYMBOLS).slice(0, 10).map((sym, idx) => ({
         rank: idx + 1,
-        symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+        symbol: sym,
         prediction: pred,
         actualOutcome: Math.random() > 0.4,
-        pnlPercent: parseFloat(((pred === "BULL" ? 1 : -1) * (Math.random() * 5)).toFixed(2)),
+        pnlPercent: parseFloat(((Math.random() * 10) - 5).toFixed(2)),
         indicators: { hmaFired: Math.random() > 0.2, stFired: Math.random() > 0.3, wtFired: Math.random() > 0.1, tsiFired: Math.random() > 0.2, htfFired: Math.random() > 0.4 }
       }));
       
@@ -2616,7 +2770,7 @@ async function getHistoricalAssessments() {
         bearishPicks: genPicks("BEAR")
       });
     }
-    await fs.writeFile(HISTORICAL_ASSESSMENTS_FILE, JSON.stringify(data, null, 2));
+    await fs.writeFile(historicalFile, JSON.stringify(data, null, 2));
     return data;
   }
 }

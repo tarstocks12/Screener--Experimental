@@ -1526,13 +1526,7 @@ export default function App() {
     }
   }, [selectedRow?.Symbol, activeTimeframe, engine]);
 
-  // Dynamic state pooling loop to update quotes smoothly without full loaders
-  useEffect(() => {
-    const updateInterval = setInterval(() => {
-      fetchScreenerData(activeTimeframe, false, activeWatchlist, personalSymbols);
-    }, 4000);
-    return () => clearInterval(updateInterval);
-  }, [activeTimeframe, selectedRow?.Symbol, activeWatchlist, personalSymbols, engine]);
+  // Dynamic state pooling loop removed as per request
 
   // Real-Time Alert Scanner compiled directly from actual calculated technical indicators
   useEffect(() => {
@@ -3697,7 +3691,7 @@ export default function App() {
       <footer className="border-t border-[#2a2d32] bg-[#0d0e12] px-6 py-3 text-[10px] flex flex-col md:flex-row items-center justify-between text-[#8e9299] gap-3 font-mono mt-auto uppercase tracking-widest">
         <div className="flex items-center space-x-2">
           <Globe className="h-3.5 w-3.5 text-orange-500" />
-          <span className="font-sans normal-case tracking-normal">Quant indicator metrics update and emit signals live continuously based on the underlying Pine logic matrix.</span>
+          <button onClick={() => fetchScreenerData(activeTimeframe, true, activeWatchlist, personalSymbols)} className="font-sans normal-case tracking-normal hover:text-white transition-colors cursor-pointer text-left">Click here to manually run the scan for Quant indicator metrics update</button>
         </div>
         <div className="flex items-center space-x-3 text-[10px]">
           <span>Enclave: SH-02</span>
