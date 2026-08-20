@@ -38,6 +38,8 @@ import TsiDashboard from "./components/TsiDashboard.js";
 import HmaDashboard from "./components/HmaDashboard.js";
 import ScreenerD7 from "./components/ScreenerD7.js";
 import { D8Screener } from "./components/D8Screener.js";
+import Top10Dashboard from "./components/Top10Dashboard.js";
+import NextDaySmartDashboard from "./components/NextDaySmartDashboard.js";
 import { getRowReversalTrade, getAdvancedAdaptiveReversal } from "./lib/reversal-engine.js";
 import { DEFAULT_PERSONAL_SYMBOLS, FNO_SYMBOLS_LIST, NIFTY_500_SYMBOLS_LIST } from "./data/watchlists.js";
 import { isLongSignal, isShortSignal } from "./lib/pine-math.js";
@@ -398,7 +400,7 @@ const generateClientFallbackHistory = (symbol: string, tf: Timeframe): any[] => 
 export default function App() {
   const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>("1H");
   const [engine, setEngine] = useState<string>("quant_swt");
-  const [activeTab, setActiveTab] = useState<"dashboard" | "technical_indicators" | "screener" | "notifications" | "wt_dashboard" | "wt_ema_dashboard" | "wt_hma_dashboard" | "ema_dashboard" | "tsi_dashboard" | "hma_dashboard">("hma_dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "technical_indicators" | "screener" | "notifications" | "wt_dashboard" | "wt_ema_dashboard" | "wt_hma_dashboard" | "ema_dashboard" | "tsi_dashboard" | "hma_dashboard" | "top10_dashboard" | "next_day_dashboard">("next_day_dashboard");
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
 
   // Screener Page Specific States
@@ -1848,6 +1850,26 @@ export default function App() {
             D8 — SCREENER
           </button>
           <button
+            onClick={() => setActiveTab("top10_dashboard")}
+            className={`px-3 py-1.5 text-[11px] font-mono font-extrabold tracking-wider rounded transition-all cursor-pointer ${
+              activeTab === "top10_dashboard"
+                ? "bg-orange-500 text-black shadow-md shadow-orange-500/20"
+                : "text-[#8e9299] hover:text-[#e0e0e0] hover:bg-[#1f2228]"
+            }`}
+          >
+            TOP 10
+          </button>
+          <button
+            onClick={() => setActiveTab("next_day_dashboard")}
+            className={`px-3 py-1.5 text-[11px] font-mono font-extrabold tracking-wider rounded transition-all cursor-pointer flex items-center gap-1 ${
+              activeTab === "next_day_dashboard"
+                ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+                : "text-[#8e9299] hover:text-[#e0e0e0] hover:bg-[#1f2228]"
+            }`}
+          >
+            <Brain className="w-3 h-3" /> NEXT DAY TOP 10
+          </button>
+          <button
             onClick={() => setActiveTab("notifications")}
             className={`px-3 py-1.5 text-[11px] font-mono font-extrabold tracking-wider rounded transition-all cursor-pointer relative flex items-center gap-1.5 ${
               activeTab === "notifications"
@@ -2993,6 +3015,14 @@ export default function App() {
       ) : activeTab === "d8_screener" ? (
         <div className="flex-1 max-w-[1700px] w-full mx-auto p-4 sm:p-6">
           <D8Screener personalSymbols={personalSymbols} />
+        </div>
+      ) : activeTab === "top10_dashboard" ? (
+        <div className="flex-1 max-w-[1700px] w-full mx-auto p-4 sm:p-6">
+          <Top10Dashboard personalSymbols={personalSymbols} />
+        </div>
+      ) : activeTab === "next_day_dashboard" ? (
+        <div className="flex-1 max-w-[1700px] w-full mx-auto p-4 sm:p-6">
+          <NextDaySmartDashboard personalSymbols={personalSymbols} />
         </div>
       ) : activeTab === "screener" ? (
         <main className="flex-1 max-w-[1700px] w-full mx-auto p-4 sm:p-6 flex flex-col space-y-6">
